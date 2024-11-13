@@ -639,7 +639,7 @@ const ChatSetAttr = (function () {
 			let charIDList = [],
 				errors = [];
 			const hasValue = ["charid", "name", "fb-header", "fb-content", "fb-from"],
-				optsArray = ["all", "allgm", "charid", "name", "allplayers", "sel", "deletemode",
+				optsArray = ["charid", "name", "sel", "deletemode",
 					"replace", "nocreate", "mod", "modb", "evaluate", "silent", "reset", "mute",
 					"fb-header", "fb-content", "fb-from", "fb-public"
 				],
@@ -668,29 +668,13 @@ const ChatSetAttr = (function () {
 				return;
 			}
 			// Get list of character IDs
-			if (opts.all && isGM) {
-				charIDList = findObjs({
-					_type: "character"
-				}).map(c => c.id);
-			} else if (opts.allgm && isGM) {
-				charIDList = findObjs({
-					_type: "character"
-				}).filter(c => c.get("controlledby") === "")
-					.map(c => c.id);
-			} else if (opts.allplayers && isGM) {
-				charIDList = findObjs({
-					_type: "character"
-				}).filter(c => c.get("controlledby") !== "")
-					.map(c => c.id);
-			} else {
-				if (opts.charid) charIDList.push(...opts.charid.split(/\s*,\s*/));
-				if (opts.name) charIDList.push(...getIDsFromNames(opts.name, errors));
-				if (opts.sel) charIDList.push(...getIDsFromTokens(selected));
-				charIDList = checkPermissions([...new Set(charIDList)], errors, playerid, isGM);
-			}
+			if (opts.charid) charIDList.push(...opts.charid.split(/\s*,\s*/));
+			if (opts.name) charIDList.push(...getIDsFromNames(opts.name, errors));
+			if (opts.sel) charIDList.push(...getIDsFromTokens(selected));
+			charIDList = checkPermissions([...new Set(charIDList)], errors, playerid, isGM);
 			if (charIDList.length === 0) {
-				errors.push("No target characters. You need to supply one of --all, --allgm, --sel," +
-					" --allplayers, --charid, or --name.");
+				errors.push("No target characters. You need to supply one of --sel," +
+					" --charid, or --name.");
 			}
 			if (Object.keys(setting).length === 0) {
 				errors.push("No attributes supplied.");
