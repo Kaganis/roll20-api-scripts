@@ -7,6 +7,8 @@
     
 </div>
 
+Fork of the main repository, just to have a version of ChatSetAttr with all the variations of --all hacked out of it because they really don't find a guild / westmarches / living world style game.
+
 Roll20 API Scripts
 ==================
 
