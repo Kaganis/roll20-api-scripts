@@ -1,6 +1,6 @@
-// ChatSetAttr version 1.10
-// Last Updated: 2020-09-03
-// A script to create, modify, or delete character attributes from the chat area or macros.
+// ChatSetAttr version 1.11
+// Last Updated: 2024-11-25
+// A script to create, or modify, character attributes from the chat area or macros.
 // If you don't like my choices for --replace, you can edit the replacers variable at your own peril to change them.
 
 /* global log, state, globalconfig, getObj, sendChat, _, getAttrByName, findObjs, createObj, playerIsGM, on */
@@ -341,13 +341,13 @@ const ChatSetAttr = (function () {
 				if (nameIndex !== -1) attrs[attrNames[nameIndex]] = attr;
 			});
 			_.difference(attrNames, Object.keys(attrs)).forEach(attrName => {
-				if (!opts.nocreate && !opts.deletemode) {
+				if (!opts.nocreate) {
 					attrs[attrName] = createObj("attribute", {
 						characterid: charid,
 						name: attrName
 					});
 					notifyObservers("add", attrs[attrName]);
-				} else if (!opts.deletemode) {
+				} else {
 					errors.push(`Missing attribute ${attrName} not created for` +
 						` character ${getCharNameById(charid)}.`);
 				}
@@ -395,7 +395,7 @@ const ChatSetAttr = (function () {
 				let finalId;
 				if (isDef(p.rowNum) && isDef(repRowIds[p.splitName[0]][p.rowNum])) {
 					finalId = repRowIds[p.splitName[0]][p.rowNum];
-				} else if (p.rowIdLo === "-create" && !opts.deletemode) {
+				} else if (p.rowIdLo === "-create") {
 					finalId = repRowIds[p.splitName[0]][repRowIds[p.splitName[0]].length - 1];
 				} else if (isDef(p.rowIdLo) && repRowIdsLo[p.splitName[0]].includes(p.rowIdLo)) {
 					finalId = repRowIds[p.splitName[0]][repRowIdsLo[p.splitName[0]].indexOf(p.rowIdLo)];
@@ -420,44 +420,19 @@ const ChatSetAttr = (function () {
 						attrNameCased = getCIKey(allRepAttrs[p.splitName[0]], finalName);
 					if (attrNameCased) {
 						attrs[attrName] = allRepAttrs[p.splitName[0]][attrNameCased];
-					} else if (!opts.nocreate && !opts.deletemode) {
+					} else if (!opts.nocreate) {
 						attrs[attrName] = createObj("attribute", {
 							characterid: charid,
 							name: finalName
 						});
 						notifyObservers("add", attrs[attrName]);
-					} else if (!opts.deletemode) {
+					} else {
 						errors.push(`Missing attribute ${finalName} not created` +
 							` for character ${getCharNameById(charid)}.`);
 					}
 				}
 			});
 			return attrs;
-		},
-		// Deleting attributes
-		delayedDeleteAttributes = function (whisper, list, setting, errors, rData, opts) {
-			const timeNotification = notifyAboutDelay(whisper),
-				cList = [].concat(list),
-				feedback = {},
-				dWork = function (charid) {
-					const attrs = getCharAttributes(charid, setting, errors, rData, opts);
-					feedback[charid] = [];
-					deleteCharAttributes(charid, attrs, feedback);
-					if (cList.length) {
-						setTimeout(dWork, 50, cList.shift());
-					} else {
-						clearTimeout(timeNotification);
-						if (!opts.silent) sendDeleteFeedback(whisper, feedback, opts);
-					}
-				};
-			dWork(cList.shift());
-		},
-		deleteCharAttributes = function (charid, attrs, feedback) {
-			Object.keys(attrs).forEach(name => {
-				attrs[name].remove();
-				notifyObservers("destroy", attrs[name]);
-				feedback[charid].push(name);
-			});
 		},
 		// These functions parse the chat input.
 		parseOpts = function (content, hasValue) {
@@ -555,13 +530,6 @@ const ChatSetAttr = (function () {
 			} else if (match && match[2] === "_") {
 				output.rowId = match[1];
 				output.rowIdLo = match[1].toLowerCase();
-			} else if (match && match[1][0] === "$" && opts.deletemode) {
-				output.rowNum = parseInt(match[1].slice(1));
-				output.rowMatch = true;
-			} else if (match && opts.deletemode) {
-				output.rowId = match[1];
-				output.rowIdLo = match[1].toLowerCase();
-				output.rowMatch = true;
 			} else {
 				errors.push(`Could not understand repeating attribute name ${name}.`);
 				output = null;
@@ -569,9 +537,6 @@ const ChatSetAttr = (function () {
 			if (output) {
 				output.splitName = name.split(match[0]);
 				globalData.sections.add(output.splitName[0]);
-				if (output.rowIdLo === "-create" && !opts.deletemode) {
-					globalData.toCreate.add(output.splitName[0]);
-				}
 			}
 			return output;
 		},
@@ -623,23 +588,12 @@ const ChatSetAttr = (function () {
 				"<p>" + (feedback.join("<br>") || "Nothing to do.") + "</p></div>";
 			sendChatMessage(output, opts["fb-from"]);
 		},
-		sendDeleteFeedback = function (whisper, feedback, opts) {
-			let output = (opts["fb-public"] ? "" : whisper) +
-				"<div style=\"border:1px solid black;background-color:#FFFFFF;padding:3px;\">" +
-				"<h3>" + (("fb-header" in opts) ? opts["fb-header"] : "Deleting attributes") + "</h3><p>";
-			output += Object.entries(feedback)
-				.filter(([, arr]) => arr.length)
-				.map(([charid, arr]) => `Deleting attribute(s) ${arr.join(", ")} for character ${getCharNameById(charid)}.`)
-				.join("<br>") || "Nothing to do.";
-			output += "</p></div>";
-			sendChatMessage(output, opts["fb-from"]);
-		},
 		handleCommand = (content, playerid, selected, pre) => {
 			// Parsing input
 			let charIDList = [],
 				errors = [];
 			const hasValue = ["charid", "name", "fb-header", "fb-content", "fb-from"],
-				optsArray = ["all", "allgm", "charid", "name", "allplayers", "sel", "deletemode",
+				optsArray = ["charid", "name", "sel",
 					"replace", "nocreate", "mod", "modb", "evaluate", "silent", "reset", "mute",
 					"fb-header", "fb-content", "fb-from", "fb-public"
 				],
@@ -650,7 +604,6 @@ const ChatSetAttr = (function () {
 			opts.modb = opts.modb || (pre === "modb");
 			opts.reset = opts.reset || (pre === "reset");
 			opts.silent = opts.silent || opts.mute;
-			opts.deletemode = (pre === "del");
 			// Sanitise feedback
 			if ("fb-from" in opts) opts["fb-from"] = String(opts["fb-from"]);
 			// Parse desired attribute values
@@ -668,42 +621,22 @@ const ChatSetAttr = (function () {
 				return;
 			}
 			// Get list of character IDs
-			if (opts.all && isGM) {
-				charIDList = findObjs({
-					_type: "character"
-				}).map(c => c.id);
-			} else if (opts.allgm && isGM) {
-				charIDList = findObjs({
-					_type: "character"
-				}).filter(c => c.get("controlledby") === "")
-					.map(c => c.id);
-			} else if (opts.allplayers && isGM) {
-				charIDList = findObjs({
-					_type: "character"
-				}).filter(c => c.get("controlledby") !== "")
-					.map(c => c.id);
-			} else {
-				if (opts.charid) charIDList.push(...opts.charid.split(/\s*,\s*/));
-				if (opts.name) charIDList.push(...getIDsFromNames(opts.name, errors));
-				if (opts.sel) charIDList.push(...getIDsFromTokens(selected));
-				charIDList = checkPermissions([...new Set(charIDList)], errors, playerid, isGM);
-			}
+			if (opts.charid) charIDList.push(...opts.charid.split(/\s*,\s*/));
+			if (opts.name) charIDList.push(...getIDsFromNames(opts.name, errors));
+			if (opts.sel) charIDList.push(...getIDsFromTokens(selected));
+			charIDList = checkPermissions([...new Set(charIDList)], errors, playerid, isGM);
 			if (charIDList.length === 0) {
-				errors.push("No target characters. You need to supply one of --all, --allgm, --sel," +
-					" --allplayers, --charid, or --name.");
+				errors.push("No target characters. You need to supply one of --sel," +
+					" --charid, or --name.");
 			}
 			if (Object.keys(setting).length === 0) {
 				errors.push("No attributes supplied.");
 			}
 			// Get attributes
 			if (!opts.mute) handleErrors(whisper, errors);
-			// Set or delete attributes
+			// Set attributes
 			if (charIDList.length > 0 && Object.keys(setting).length > 0) {
-				if (opts.deletemode) {
-					delayedDeleteAttributes(whisper, charIDList, setting, errors, rData, opts);
-				} else {
-					delayedGetAndSetAttributes(whisper, charIDList, setting, errors, rData, opts);
-				}
+				delayedGetAndSetAttributes(whisper, charIDList, setting, errors, rData, opts);
 			}
 		},
 		handleInlineCommand = (msg) => {
@@ -730,7 +663,7 @@ const ChatSetAttr = (function () {
 		handleInput = function (msg) {
 			if (msg.type !== "api") handleInlineCommand(msg);
 			else {
-				const mode = msg.content.match(/^!(reset|set|del|mod|modb)attr\b(?:-|\s|$)(config)?/);
+				const mode = msg.content.match(/^!(reset|set|mod|modb)attr\b(?:-|\s|$)(config)?/);
 
 				if (mode && mode[2]) {
 					if (playerIsGM(msg.playerid)) {
